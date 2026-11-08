@@ -1,6 +1,63 @@
-@AiAssistant.Api_HostAddress = http://localhost:5107
+### Test AI Assistant service bang extension REST Client trong VS Code
+### Can chay: Identity (5101), AiAssistant (5106). Can API key (xem HUONG-DAN-THAN.md muc AI)
+@host = http://localhost:5106
+@identity = http://localhost:5101
 
-GET {{AiAssistant.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Service con song khong -> 200 {"status":"ok"}
+GET {{host}}/health
 
-###
+### 2. Dang nhap lay token
+# @name login
+POST {{identity}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "champ@test.com",
+  "password": "12345678"
+}
+
+### 3. Hoi AI che do Care Plan -> 200 {"reply":"..."} (503 neu chua dat API key)
+POST {{host}}/api/ai/chat
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "mode": "care",
+  "messages": [ { "role": "user", "content": "Make a weekly care plan for my Money Tree on my desk." } ]
+}
+
+### 4. Che do Feng Shui
+POST {{host}}/api/ai/chat
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "mode": "fengshui",
+  "messages": [ { "role": "user", "content": "Which plant is lucky for a new home?" } ]
+}
+
+### 5. Mode sai -> 400
+POST {{host}}/api/ai/chat
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "mode": "abc",
+  "messages": [ { "role": "user", "content": "hi" } ]
+}
+
+### 6. Tin cuoi khong phai cua user -> 400
+POST {{host}}/api/ai/chat
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "mode": "care",
+  "messages": [ { "role": "user", "content": "hi" }, { "role": "assistant", "content": "hello" } ]
+}
+
+### 7. Khong gui token -> 401 (bao mat)
+POST {{host}}/api/ai/chat
+Content-Type: application/json
+
+{ "mode": "care", "messages": [ { "role": "user", "content": "hi" } ] }

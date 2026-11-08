@@ -7,6 +7,7 @@ public class IdentityDbContext(DbContextOptions<IdentityDbContext> options) : Db
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PasswordResetCode> PasswordResetCodes => Set<PasswordResetCode>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,6 +27,15 @@ public class IdentityDbContext(DbContextOptions<IdentityDbContext> options) : Db
              .HasForeignKey(t => t.UserId)
              .OnDelete(DeleteBehavior.Cascade);
             e.Ignore(t => t.IsActive);
+        });
+
+        modelBuilder.Entity<PasswordResetCode>(e =>
+        {
+            e.HasIndex(c => new { c.UserId, c.CreatedAt });
+            e.HasOne(c => c.User)
+             .WithMany()
+             .HasForeignKey(c => c.UserId)
+             .OnDelete(DeleteBehavior.Cascade);   // Xoa user -> xoa luon cac ma
         });
     }
 }

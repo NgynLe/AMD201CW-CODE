@@ -1,9 +1,11 @@
 // Man Garden (Home)
 // - Dien thoai: 1 cot (mockup "Mobile · Home Dashboard")
 // - Man hinh rong: 2 cot + bieu do 24h + hoat dong gan day (mockup "Web · Dashboard")
-// So lieu do am/thoi tiet/hoat dong hien la DU LIEU MAU - se thay bang Sensor/Reminder service sau
+// Thoi tiet (Reminder service), chuoi tuoi cay (Garden service) va chuong thong bao (Notification service) la DU LIEU THAT.
+// So lieu do am/hoat dong van la DU LIEU MAU - se thay bang Sensor service (phan cua Nguyen Le)
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Platform, Pressable, ScrollView, View } from "react-native";
+import { router } from "expo-router";
 import { Screen } from "../../components/Screen";
 import { Card } from "../../components/Card";
 import { Icon } from "../../components/Icon";
@@ -12,7 +14,12 @@ import { Toggle } from "../../components/Toggle";
 import { MoistureRing, moistureLevel } from "../../components/MoistureRing";
 import { MoistureChart } from "../../components/MoistureChart";
 import { useAuth } from "../../auth/AuthContext";
+import { StreakWeek } from "../../components/StreakWeek";
+import { useStreak, useUnreadCount, useWeather } from "../../hooks/useGardenData";
 import { useIsWide } from "../../hooks/useIsWide";
+import { useLang, type Strings } from "../../i18n/LanguageContext";
+import type { Streak } from "../../api/garden";
+import type { WeatherReport } from "../../api/weather";
 import { colors, radius } from "../../theme";
 
 const native = Platform.OS !== "web";
@@ -60,25 +67,59 @@ function StreakFlame() {
   );
 }
 
-function StreakPill() {
+function StreakPill({ streak }: { streak: Streak | null }) {
+  const { t } = useLang();
+  const has = !!streak && streak.current > 0;
   return (
-    <View
-      style={{
-        alignSelf: "flex-start",
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 14,
-        borderRadius: radius.pill,
-        backgroundColor: colors.sunSoft,
-        borderWidth: 1,
-        borderColor: colors.sunLine,
-      }}
-    >
-      <StreakFlame />
-      <Txt weight="semibold" color={colors.warnText}>7-Day Care Streak</Txt>
+    <View style={{ gap: 10 }}>
+      <View
+        style={{
+          alignSelf: "flex-start",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          paddingVertical: 8,
+          paddingHorizontal: 14,
+          borderRadius: radius.pill,
+          backgroundColor: colors.sunSoft,
+          borderWidth: 1,
+          borderColor: colors.sunLine,
+        }}
+      >
+        <StreakFlame />
+        <Txt weight="semibold" color={colors.warnText}>
+          {has ? `${streak!.current}${t.streakDays}` : t.streakStart}
+        </Txt>
+      </View>
+      {streak ? (
+        <View style={{ gap: 6 }}>
+          <StreakWeek streak={streak} />
+          {streak.atRisk ? <Txt size={12} weight="medium" color={colors.warnIcon}>{t.streakAtRisk}</Txt> : null}
+          {streak.wateredToday ? <Txt size={12} weight="medium" color={colors.primaryDark}>{t.streakDone}</Txt> : null}
+        </View>
+      ) : null}
     </View>
+  );
+}
+
+// Chuong thong bao + huy hieu so thu chua doc. Bam de mo man Thong bao
+function BellButton() {
+  const { t } = useLang();
+  const unread = useUnreadCount();
+  return (
+    <Pressable
+      onPress={() => router.push("/notifications")}
+      accessibilityRole="button"
+      accessibilityLabel={unread > 0 ? `${t.notificationsLabel} (${unread})` : t.notificationsLabel}
+      style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}
+    >
+      <Icon name="bell" size={20} />
+      {unread > 0 ? (
+        <View style={{ position: "absolute", top: -2, right: -2, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.danger, alignItems: "center", justifyContent: "center" }}>
+          <Txt size={10} weight="bold" color="#FFFFFF">{unread > 9 ? "9+" : String(unread)}</Txt>
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -90,24 +131,52 @@ function Avatar({ name }: { name?: string }) {
   );
 }
 
-function WeatherCard({ wide }: { wide?: boolean }) {
+function conditionLabel(code: string, t: Strings) {
+  const key = `cond_${code}` as keyof Strings;
+  return (t[key] as string | undefined) ?? t.cond_unknown;
+}
+
+function WeatherCard({ wide, weather, loading, error }: { wide?: boolean; weather: WeatherReport | null; loading: boolean; error: string | null }) {
+  const { t } = useLang();
+
+  if (!weather) {
+    return (
+      <Card style={wide ? { borderRadius: radius.hero, padding: 20 } : null}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <Icon name="sun" size={wide ? 48 : 44} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Txt color={colors.muted}>{loading ? t.weatherLoading : t.weatherUnavailable}</Txt>
+            {!loading && error ? <Txt size={12} color={colors.muted}>{error}</Txt> : null}
+          </View>
+        </View>
+      </Card>
+    );
+  }
+
+  const tomorrow = weather.forecast[1];
   return (
     <Card style={wide ? { borderRadius: radius.hero, padding: 20 } : null}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <Icon name="sun" size={wide ? 48 : 44} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Txt size={wide ? 30 : 28} weight="bold">33°C</Txt>
-          <Txt size={13} color={colors.muted}>Sunny · Ho Chi Minh City</Txt>
+          <Txt size={wide ? 30 : 28} weight="bold">{Math.round(weather.current.temperatureC)}°C</Txt>
+          <Txt size={13} color={colors.muted}>{conditionLabel(weather.current.condition, t)} · {weather.locationName}</Txt>
         </View>
         <View style={{ alignItems: "flex-end", gap: 2 }}>
-          <Txt size={12} color={colors.muted}>{wide ? "Tomorrow" : "Humidity"}</Txt>
-          <Txt size={15} weight="semibold">{wide ? "36°C" : "62%"}</Txt>
+          <Txt size={12} color={colors.muted}>{wide && tomorrow ? t.tomorrow : t.humidity}</Txt>
+          <Txt size={15} weight="semibold">
+            {wide && tomorrow ? `${Math.round(tomorrow.maxC)}°C` : `${weather.current.humidityPercent}%`}
+          </Txt>
         </View>
       </View>
-      <View style={{ flexDirection: "row", gap: 10, alignItems: "center", backgroundColor: colors.warnBg, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
-        <Icon name="alert" size={18} color={colors.warnIcon} />
-        <Txt size={13} weight="medium" color={colors.warnText}>Heatwave tomorrow — increase watering</Txt>
-      </View>
+      {weather.heatwave.tomorrow || weather.heatwave.today ? (
+        <View style={{ flexDirection: "row", gap: 10, alignItems: "center", backgroundColor: colors.warnBg, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 12 }}>
+          <Icon name="alert" size={18} color={colors.warnIcon} />
+          <Txt size={13} weight="medium" color={colors.warnText} style={{ flex: 1 }}>
+            {weather.heatwave.tomorrow ? t.heatwaveTomorrow : t.heatwaveToday}
+          </Txt>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -202,7 +271,7 @@ function FloatingPump({ watering, onPress, inset }: { watering: boolean; onPress
   );
 }
 
-function Toast({ moisture, wide }: { moisture: number; wide: boolean }) {
+function Toast({ moisture, wide, note }: { moisture: number; wide: boolean; note?: string | null }) {
   return (
     <View
       accessibilityLiveRegion="polite"
@@ -212,7 +281,10 @@ function Toast({ moisture, wide }: { moisture: number; wide: boolean }) {
       ]}
     >
       <Icon name="check" size={18} color={colors.primaryLine} strokeWidth={2.5} />
-      <Txt weight="medium" color="#FFFFFF">Watering completed — soil is now {moisture}%</Txt>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Txt weight="medium" color="#FFFFFF">Watering completed — soil is now {moisture}%</Txt>
+        {note ? <Txt size={12} color={colors.primaryLine}>{note}</Txt> : null}
+      </View>
     </View>
   );
 }
@@ -221,7 +293,11 @@ function Toast({ moisture, wide }: { moisture: number; wide: boolean }) {
 
 export default function GardenScreen() {
   const { user } = useAuth();
+  const { t } = useLang();
   const wide = useIsWide();
+  const { weather, loading: weatherLoading, error: weatherError } = useWeather();
+  const { streak, recordWatering } = useStreak();
+  const [note, setNote] = useState<string | null>(null);
   const [moisture, setMoisture] = useState(42);
   const [watering, setWatering] = useState(false);
   const [auto, setAuto] = useState(true);
@@ -230,7 +306,7 @@ export default function GardenScreen() {
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  // Gia lap bom nuoc 3 giay. Sau nay goi API Sensor service
+  // Gia lap bom nuoc 3 giay (Sensor service la phan cua Nguyen Le). Khi bom xong thi ghi 1 lan tuoi vao chuoi (Garden service)
   function pump() {
     if (watering) return;
     setWatering(true);
@@ -240,7 +316,12 @@ export default function GardenScreen() {
         setWatering(false);
         setMoisture(65);
         setToast(true);
-        timers.current.push(setTimeout(() => setToast(false), 2600));
+        setNote(null);
+        recordWatering().then((res) => {
+          if (!res) setNote(t.streakFailed);
+          else if (res.milestoneReached) setNote(t.streakMilestone);
+        });
+        timers.current.push(setTimeout(() => setToast(false), 4000));
       }, 3000),
     );
   }
@@ -255,7 +336,7 @@ export default function GardenScreen() {
               <Txt color={colors.muted}>{todayLabel()}</Txt>
               <Txt size={28} weight="bold" accessibilityRole="header">Hello, {user?.displayName}!</Txt>
             </View>
-            <StreakPill />
+            <StreakPill streak={streak} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Choose plant"
@@ -266,6 +347,7 @@ export default function GardenScreen() {
                 <Icon name="chevron" size={16} color={colors.muted} />
               </View>
             </Pressable>
+            <BellButton />
             <Avatar name={user?.displayName} />
           </View>
 
@@ -295,7 +377,7 @@ export default function GardenScreen() {
 
             {/* Cot phai */}
             <View style={{ flexGrow: 1, flexBasis: 320, minWidth: 0, gap: 20 }}>
-              <WeatherCard wide />
+              <WeatherCard wide weather={weather} loading={weatherLoading} error={weatherError} />
 
               <Card style={{ borderRadius: radius.hero, padding: 20, gap: 14 }}>
                 <Txt size={16} weight="semibold" accessibilityRole="header">Quick controls</Txt>
@@ -325,7 +407,7 @@ export default function GardenScreen() {
           </View>
         </ScrollView>
 
-        {toast && <Toast moisture={moisture} wide />}
+        {toast && <Toast moisture={moisture} wide note={note} />}
         <FloatingPump watering={watering} onPress={pump} inset={32} />
       </Screen>
     );
@@ -341,19 +423,13 @@ export default function GardenScreen() {
             <Txt size={24} weight="bold" numberOfLines={1}>Hello, {user?.displayName}!</Txt>
           </View>
           <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-              style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}
-            >
-              <Icon name="bell" size={20} />
-            </Pressable>
+            <BellButton />
             <Avatar name={user?.displayName} />
           </View>
         </View>
 
-        <StreakPill />
-        <WeatherCard />
+        <StreakPill streak={streak} />
+        <WeatherCard weather={weather} loading={weatherLoading} error={weatherError} />
 
         <Card style={{ borderRadius: radius.hero, padding: 20, alignItems: "center" }}>
           <View style={{ alignSelf: "stretch", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -384,7 +460,7 @@ export default function GardenScreen() {
         </Card>
       </ScrollView>
 
-      {toast && <Toast moisture={moisture} wide={false} />}
+      {toast && <Toast moisture={moisture} wide={false} note={note} />}
       <FloatingPump watering={watering} onPress={pump} inset={20} />
     </Screen>
   );

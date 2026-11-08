@@ -66,3 +66,32 @@ Content-Type: application/json
 {
   "refreshToken": "{{adminLogin.response.body.refreshToken}}"
 }
+
+### ===== QUEN MAT KHAU =====
+
+### 10. Xin ma dat lai mat khau -> 200
+### Chua cau hinh Smtp: ma 6 so in ra o terminal dang chay Identity (dong "===== EMAIL")
+POST {{host}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "champ@test.com"
+}
+
+### 11. Email khong ton tai -> van 200 voi cung mot cau (khong lo email nao da dang ky)
+POST {{host}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "khongtontai@test.com"
+}
+
+### 12. Dat lai mat khau: thay 123456 bang ma vua in o terminal -> 200 + token moi
+POST {{host}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "champ@test.com",
+  "code": "123456",
+  "newPassword": "12345678"
+}

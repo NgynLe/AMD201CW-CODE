@@ -1,6 +1,36 @@
-@Notification.Api_HostAddress = http://localhost:5023
+### Test Notification service bang extension REST Client trong VS Code (bam "Send Request" tren tung request)
+### Can chay: Docker (Postgres + RabbitMQ), Identity (5101), Notification (5105)
+@host = http://localhost:5105
+@identity = http://localhost:5101
 
-GET {{Notification.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Service con song khong -> 200 {"status":"ok"}
+GET {{host}}/health
 
-###
+### 2. Dang nhap de lay token (dung tai khoan da dang ky o Identity)
+# @name login
+POST {{identity}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "champ@test.com",
+  "password": "12345678"
+}
+
+### 3. Danh sach thong bao cua toi -> 200, {"unreadCount":..., "items":[...]}
+GET {{host}}/api/notifications
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 4. Danh dau tat ca da doc -> 204 (goi lai request 3: unreadCount = 0)
+POST {{host}}/api/notifications/read-all
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 5. Khong gui token -> 401 (bao mat)
+GET {{host}}/api/notifications
+
+### 6. Danh dau mot thong bao khong ton tai -> 404
+POST {{host}}/api/notifications/00000000-0000-0000-0000-000000000001/read
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Muon co thong bao de xem: dung RabbitMQ Management (http://localhost:15672) -> Exchanges -> mamxanh.events
+### -> Publish message, hoac gui tu Garden (xong 3 ngay tuoi lien tiep) / Reminder (nang nong).
+### Chi tiet xem HUONG-DAN-THAN.md muc "Test RabbitMQ".

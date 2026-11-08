@@ -18,7 +18,7 @@ public class AuthService(IdentityDbContext db, JwtTokenService jwt)
         var email = req.Email.Trim().ToLowerInvariant();
 
         if (await db.Users.AnyAsync(u => u.Email == email))
-            throw new AuthException("Email này đã được dùng. Hãy đăng nhập hoặc dùng email khác.", 409);
+            throw new AuthException("This email is already registered. Log in or use another email.", 409);
 
         var user = new User
         {
@@ -40,7 +40,7 @@ public class AuthService(IdentityDbContext db, JwtTokenService jwt)
 
         // Cung mot thong bao cho ca 2 truong hop de khong lo email nao da ton tai
         if (user is null || !BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash))
-            throw new AuthException("Email hoặc mật khẩu chưa đúng.", 401);
+            throw new AuthException("Incorrect email or password.", 401);
 
         return await IssueTokensAsync(user);
     }
@@ -53,7 +53,7 @@ public class AuthService(IdentityDbContext db, JwtTokenService jwt)
             .FirstOrDefaultAsync(t => t.Token == refreshToken);
 
         if (stored is null || stored.RevokedAt != null || stored.ExpiresAt <= DateTime.UtcNow)
-            throw new AuthException("Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.", 401);
+            throw new AuthException("Your session has expired. Please log in again.", 401);
 
         stored.RevokedAt = DateTime.UtcNow;
         return await IssueTokensAsync(stored.User);
@@ -70,7 +70,31 @@ public class AuthService(IdentityDbContext db, JwtTokenService jwt)
         }
     }
 
-    private async Task<AuthResponse> IssueTokensAsync(User user)
+    // Doi mat khau: phai dung mat khau cu. Doi xong thu hoi TAT CA refresh token
+    // (cac may khac dang dang nhap se bi dang xuat), roi cap token moi cho may hien tai.
+    public async Task<AuthResponse> ChangePasswordAsync(Guid userId, ChangePasswordRequest req)
+    {
+        var user = await db.Users.Include(u => u.RefreshTokens).FirstOrDefaultAsync(u => u.Id == userId)
+            ?? throw new AuthException("Account not found.", 404);
+
+        if (!BCrypt.Net.BCrypt.Verify(req.CurrentPassword, user.PasswordHash))
+            throw new AuthException("Your current password is incorrect.", 400);
+
+        if (req.CurrentPassword == req.NewPassword)
+            throw new AuthException("Your new password must be different from the current one.", 400);
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+
+        var now = DateTime.UtcNow;
+        foreach (var token in user.RefreshTokens.Where(t => t.RevokedAt == null))
+            token.RevokedAt = now;
+
+        await db.SaveChangesAsync();
+        return await IssueTokensAsync(user);
+    }
+
+    // Cap access token + refresh token moi (dung chung cho dang nhap, dang ky, doi/dat lai mat khau)
+    public async Task<AuthResponse> IssueTokensAsync(User user)
     {
         var (accessToken, expiresAt) = jwt.CreateAccessToken(user);
         var refresh = jwt.CreateRefreshToken(user.Id);

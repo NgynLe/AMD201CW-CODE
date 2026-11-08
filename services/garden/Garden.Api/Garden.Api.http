@@ -1,6 +1,40 @@
-@Garden.Api_HostAddress = http://localhost:5057
+### Test Garden service (chuoi tuoi cay) bang extension REST Client trong VS Code
+### Can chay: Docker, Identity (5101), Garden (5103). Muon thay thong bao: chay them Notification (5105)
+@host = http://localhost:5103
+@identity = http://localhost:5101
 
-GET {{Garden.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Service con song khong -> 200 {"status":"ok"}
+GET {{host}}/health
 
-###
+### 2. Dang nhap lay token
+# @name login
+POST {{identity}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "champ@test.com",
+  "password": "12345678"
+}
+
+### 3. Xem chuoi hien tai -> 200. Nguoi moi: current = 0, wateredToday = false
+GET {{host}}/api/garden/streak
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 4. Ghi nhan tuoi cay hom nay -> 200, firstTimeToday = true, streak.current = 1
+POST {{host}}/api/garden/watering
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 5. Tuoi lan 2 trong ngay -> 200, firstTimeToday = false, streak.current van = 1 (khong tang)
+POST {{host}}/api/garden/watering
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 6. Xem lai chuoi -> wateredToday = true, week co ngay cuoi la true
+GET {{host}}/api/garden/streak
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 7. Khong gui token -> 401 (bao mat)
+GET {{host}}/api/garden/streak
+
+### 8. Token sai -> 401
+GET {{host}}/api/garden/streak
+Authorization: Bearer abc.def.ghi

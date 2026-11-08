@@ -1,55 +1,66 @@
 // Man TreeO AI: 2 che do Care Plan / Feng Shui, chat
-// Cau tra loi hien la DEMO - se goi AI Assistant service sau
-import { useEffect, useRef, useState } from "react";
+// Cau tra loi that tu AI Assistant service (services/ai-assistant); service goi mo hinh AI bang API key dat o phia server
+import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View, type ScrollViewInstance } from "react-native";
 import { Screen } from "../../components/Screen";
 import { Icon } from "../../components/Icon";
 import { Txt } from "../../components/Txt";
 import { useAuth } from "../../auth/AuthContext";
+import { aiApi, type AiMode, type ChatTurn } from "../../api/ai";
+import { useLang } from "../../i18n/LanguageContext";
 import { keyboardBehavior } from "../../hooks/useKeyboardVisible";
 import { cardShadow, colors, fonts, radius } from "../../theme";
 
-type Message = { id: number; role: "ai" | "user"; title?: string; text: string };
+// kind "greeting": loi chao, hien theo ngon ngu dang chon (khong gui len AI)
+type Message = { id: number; role: "ai" | "user"; text: string; kind?: "greeting" | "error" };
 
-const MODES = ["Care Plan", "Feng Shui"] as const;
-const CHIPS = [
-  ["Weekly plan for my Money Tree", "Plan for a hot week", "Care plan while I travel 5 days"],
-  ["Best plant for my desk", "Lucky plants for a new home", "Where to place a Money Tree"],
-];
+const MODE_KEYS: AiMode[] = ["care", "fengshui"];
 
 export default function AiScreen() {
-  const { user } = useAuth();
+  const { user, authFetch } = useAuth();
+  const { t } = useLang();
   const [mode, setMode] = useState(0);
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<Message[]>(() => [
-    {
-      id: 1,
-      role: "ai",
-      text: `Hi ${user?.displayName ?? "there"}! I can build a care plan for your plant, or give feng shui tips on which plant to choose and where to place it.`,
-    },
-    { id: 2, role: "user", text: "Make a weekly care plan for my Money Tree on my desk." },
-    {
-      id: 3,
-      role: "ai",
-      title: "Weekly care plan — Money Tree",
-      text: "Mon · Check soil; water only if below 30%\nWed · Wipe the leaves, turn the pot a quarter\nFri · Check soil again\nSun · Look for yellow leaves or pests\n\nHeatwave tomorrow: keep it out of direct afternoon sun.",
-    },
-  ]);
+  const [sending, setSending] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([{ id: 1, role: "ai", text: "", kind: "greeting" }]);
   const scroll = useRef<ScrollViewInstance>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
+  const modeLabels = [t.aiModeCare, t.aiModeFengShui];
+  const chips = [
+    [t.aiChipCare1, t.aiChipCare2, t.aiChipCare3],
+    [t.aiChipFs1, t.aiChipFs2, t.aiChipFs3],
+  ];
 
-  function send() {
+  // Doi che do -> bat dau cuoc tro chuyen moi (tranh tron lich su Care Plan voi Feng Shui)
+  function changeMode(i: number) {
+    if (i === mode || sending) return;
+    setMode(i);
+    setMessages([{ id: Date.now(), role: "ai", text: "", kind: "greeting" }]);
+  }
+
+  async function send() {
     const q = draft.trim();
-    if (!q) return;
+    if (!q || sending) return;
+
+    // Lich su gui len AI: bo loi chao va tin loi, doi "ai" -> "assistant"
+    const history: ChatTurn[] = [
+      ...messages
+        .filter((m) => !m.kind)
+        .map((m): ChatTurn => ({ role: m.role === "ai" ? "assistant" : "user", content: m.text })),
+      { role: "user", content: q },
+    ];
+
     setMessages((m) => [...m, { id: Date.now(), role: "user", text: q }]);
     setDraft("");
-    timer.current = setTimeout(() => {
-      setMessages((m) => [...m, { id: Date.now() + 1, role: "ai", text: "(Demo) The AI service will answer this question here." }]);
-    }, 900);
+    setSending(true);
+    try {
+      const res = await aiApi(authFetch).chat(MODE_KEYS[mode], history);
+      setMessages((m) => [...m, { id: Date.now() + 1, role: "ai", text: res.reply }]);
+    } catch (e) {
+      setMessages((m) => [...m, { id: Date.now() + 1, role: "ai", kind: "error", text: `${t.aiError} ${(e as Error).message}` }]);
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -64,18 +75,18 @@ export default function AiScreen() {
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Txt size={20} weight="bold">TreeO AI</Txt>
-            <Txt size={12} weight="medium" color={colors.primary}>● Online · care plans & feng shui</Txt>
+            <Txt size={12} weight="medium" color={colors.primary}>{t.aiSubtitle}</Txt>
           </View>
         </View>
         <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 4, backgroundColor: "#EEF5EE", borderRadius: 12, padding: 4 }}>
-          {MODES.map((label, i) => {
+          {modeLabels.map((label, i) => {
             const on = mode === i;
             return (
               <Pressable
                 key={label}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
-                onPress={() => setMode(i)}
+                onPress={() => changeMode(i)}
                 style={[
                   { flex: 1, height: 36, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: on ? "#FFFFFF" : "transparent" },
                   on ? cardShadow : null,
@@ -102,16 +113,18 @@ export default function AiScreen() {
             </View>
           ) : (
             <View key={m.id} style={[{ alignSelf: "flex-start", maxWidth: "86%", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: colors.divider, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 18, borderBottomLeftRadius: 4, gap: 6 }, cardShadow]}>
-              {m.title ? <Txt size={13} weight="bold" color={colors.primaryDark}>{m.title}</Txt> : null}
-              <Txt style={{ lineHeight: 21 }}>{m.text}</Txt>
+              <Txt style={{ lineHeight: 21 }} color={m.kind === "error" ? colors.danger : colors.text}>
+                {m.kind === "greeting" ? t.aiGreeting.replace("{name}", user?.displayName ?? "") : m.text}
+              </Txt>
             </View>
           ),
         )}
+        {sending ? <Txt size={12} color={colors.muted}>{t.aiThinking}</Txt> : null}
       </ScrollView>
 
       {/* Goi y nhanh */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, gap: 8 }}>
-        {CHIPS[mode].map((c) => (
+        {chips[mode].map((c) => (
           <Pressable
             key={c}
             onPress={() => setDraft(c)}
@@ -129,9 +142,9 @@ export default function AiScreen() {
           value={draft}
           onChangeText={setDraft}
           onSubmitEditing={send}
-          placeholder="Ask TreeO AI…"
+          placeholder={t.aiPlaceholder}
           placeholderTextColor="#8A968B"
-          accessibilityLabel="Ask TreeO AI"
+          accessibilityLabel={t.aiPlaceholder}
           returnKeyType="send"
           style={[
             { flex: 1, height: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.border, backgroundColor: "#FFFFFF", paddingHorizontal: 16, fontFamily: fonts.regular, fontSize: 14, color: colors.text },
@@ -141,14 +154,15 @@ export default function AiScreen() {
         <Pressable
           onPress={send}
           accessibilityRole="button"
-          accessibilityLabel="Send"
-          style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
+          accessibilityLabel={t.aiSend}
+          disabled={sending}
+          style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: sending ? colors.track : colors.primary, alignItems: "center", justifyContent: "center" }}
         >
           <Icon name="send" size={20} color="#FFFFFF" />
         </Pressable>
       </View>
       <Txt size={11} color={colors.muted} align="center" style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 12 }}>
-        TreeO AI suggests care plans and feng shui tips — it does not diagnose plant diseases.
+        {t.aiDisclaimer}
       </Txt>
       </KeyboardAvoidingView>
     </Screen>

@@ -28,14 +28,14 @@ public class AdminController(IdentityDbContext db) : ControllerBase
     public async Task<ActionResult<UserDto>> ChangeRole(Guid id, ChangeRoleRequest req)
     {
         if (!Roles.All.Contains(req.Role))
-            return BadRequest(new ErrorResponse("Vai trò không hợp lệ. Chọn User, Expert hoặc Admin."));
+            return BadRequest(new ErrorResponse("Invalid role. Choose User, Expert or Admin."));
 
         var currentId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         if (currentId == id.ToString())
-            return BadRequest(new ErrorResponse("Không thể tự đổi vai trò của chính mình."));
+            return BadRequest(new ErrorResponse("You can't change your own role."));
 
         var user = await db.Users.FindAsync(id);
-        if (user is null) return NotFound(new ErrorResponse("Không tìm thấy người dùng."));
+        if (user is null) return NotFound(new ErrorResponse("User not found."));
 
         user.Role = req.Role;
         await db.SaveChangesAsync();

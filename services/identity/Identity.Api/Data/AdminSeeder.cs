@@ -23,11 +23,11 @@ public static class AdminSeeder
         db.Users.Add(new User
         {
             Email = email,
-            DisplayName = "Quản trị viên",
+            DisplayName = "Admin",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
             Role = Roles.Admin,
         });
         await db.SaveChangesAsync();
-        logger.LogInformation("Da tao tai khoan Admin {Email}", email);
+        logger.LogInformation("Admin {Email} created.", email);
     }
 }

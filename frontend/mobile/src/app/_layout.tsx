@@ -38,6 +38,7 @@ function RootStack() {
       <Stack.Protected guard={!!user} redirectTo="/login">
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="change-password" />
+        <Stack.Screen name="notifications" />
         <Stack.Screen name="new-post" options={{ presentation: "modal" }} />
       </Stack.Protected>
     </Stack>

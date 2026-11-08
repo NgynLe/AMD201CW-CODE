@@ -1,6 +1,36 @@
-@Reminder.Api_HostAddress = http://localhost:5074
+### Test Reminder service (thoi tiet) bang extension REST Client trong VS Code
+### Can chay: Docker, Identity (5101), Reminder (5104). Can Internet de goi Open-Meteo
+@host = http://localhost:5104
+@identity = http://localhost:5101
 
-GET {{Reminder.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Service con song khong -> 200 {"status":"ok"}
+GET {{host}}/health
 
-###
+### 2. Dang nhap lay token
+# @name login
+POST {{identity}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "champ@test.com",
+  "password": "12345678"
+}
+
+### 3. Thoi tiet mac dinh (TP.HCM) -> 200: current, forecast (3 ngay), heatwave
+GET {{host}}/api/weather
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 4. Thoi tiet Ha Noi
+GET {{host}}/api/weather?lat=21.0285&lon=105.8542&name=Ha%20Noi
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 5. Toa do sai -> 400 {"message":"Invalid coordinates."}
+GET {{host}}/api/weather?lat=999&lon=0
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 6. Khong gui token -> 401 (bao mat)
+GET {{host}}/api/weather
+
+### 7. Thu canh bao nang nong: doi "HeatwaveThresholdC" trong appsettings.json xuong 20,
+### chay lai service, goi request 3. heatwave.tomorrow = true va co 1 thong bao "heatwave"
+### trong Notification service (xem HUONG-DAN-THAN.md muc Test).

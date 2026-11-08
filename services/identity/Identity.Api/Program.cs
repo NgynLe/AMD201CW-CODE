@@ -19,6 +19,20 @@ if (jwtSettings.Key.Length < 32)
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<PasswordResetService>();
+
+// ===== Gui email (quen mat khau) =====
+// Co "Smtp:Host" -> gui email that; chua co -> in ma ra terminal de chay thu
+var smtp = builder.Configuration.GetSection("Smtp").Get<SmtpSettings>() ?? new SmtpSettings();
+if (string.IsNullOrWhiteSpace(smtp.Host))
+{
+    builder.Services.AddSingleton<IEmailSender, LogEmailSender>();
+}
+else
+{
+    builder.Services.AddSingleton(smtp);
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -38,10 +52,12 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
-// ===== Cho phep web React (localhost:5173) goi API =====
+// ===== CORS: cac trang web duoc phep goi API (danh sach o appsettings.json, muc "Cors:Origins") =====
+// App tren dien thoai khong bi CORS chan, chi trinh duyet moi can.
+var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? new[] { "http://localhost:8081" };
 builder.Services.AddCors(options =>
     options.AddPolicy("web", policy => policy
-        .WithOrigins("http://localhost:5173")
+        .WithOrigins(corsOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()));
 

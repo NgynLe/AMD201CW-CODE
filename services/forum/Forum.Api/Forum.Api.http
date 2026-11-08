@@ -1,6 +1,64 @@
-@Forum.Api_HostAddress = http://localhost:5296
+### Test Forum service bang REST Client (bam "Send Request" tren tung request)
+### Can chay ca Identity (5101) va Forum (5107)
+@identity = http://localhost:5101
+@forum = http://localhost:5107
 
-GET {{Forum.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### 1. Dang nhap de lay token (dung tai khoan da dang ky)
+# @name login
+POST {{identity}}/api/auth/login
+Content-Type: application/json
 
-###
+{
+  "email": "champ@test.com",
+  "password": "12345678"
+}
+
+### 2. Xem tat ca bai (co 3 bai mau)
+# @name all
+GET {{forum}}/api/forum/posts?filter=all
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 3. Chi bai cua chuyen gia
+GET {{forum}}/api/forum/posts?filter=experts
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 4. Dang bai moi -> 201
+# @name created
+POST {{forum}}/api/forum/posts
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "content": "My first post from the REST client!"
+}
+
+### 5. Tim bai vua dang -> likeCount 1
+POST {{forum}}/api/forum/posts/{{created.response.body.id}}/like
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 6. Bo tim -> likeCount 0
+DELETE {{forum}}/api/forum/posts/{{created.response.body.id}}/like
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 7. Theo doi chuyen gia mau Linh Tran
+POST {{forum}}/api/forum/follows/11111111-1111-1111-1111-111111111111
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 8. Tab Following -> chi con bai cua Linh Tran
+GET {{forum}}/api/forum/posts?filter=following
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 9. Tu theo doi chinh minh -> 400
+POST {{forum}}/api/forum/follows/{{login.response.body.user.id}}
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 10. Xoa bai cua minh -> 204
+DELETE {{forum}}/api/forum/posts/{{created.response.body.id}}
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 11. Xoa bai cua nguoi khac -> 403
+DELETE {{forum}}/api/forum/posts/{{all.response.body.$[0].id}}
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### 12. Khong gui token -> 401
+GET {{forum}}/api/forum/posts
